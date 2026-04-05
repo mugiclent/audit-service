@@ -106,7 +106,7 @@ jobs:
               --network katisha-net \
               -e DATABASE_URL="postgresql://audit_svc:${DB_PASSWORD}@pgbouncer:6432/audit_db?pgbouncer=true&connect_timeout=5&pool_timeout=5" \
               ${{ secrets.DOCKER_USERNAME }}/audit-svc:${{ needs.build-and-push.outputs.image_tag }} \
-              node node_modules/prisma/build/index.js db push --schema prisma/schema.prisma --skip-generate
+              npm run db:push
 
             infisical run \
               --token="$INFISICAL_TOKEN" \
