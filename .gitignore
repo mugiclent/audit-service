@@ -15,10 +15,5 @@ node_modules/
 # Coverage
 coverage/
 
-# Local dev — not for production
-docker-compose.local.yml
-Dockerfile.local
-local/
-
 # OS
 .DS_Store

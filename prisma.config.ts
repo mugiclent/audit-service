@@ -8,7 +8,6 @@ export default defineConfig({
   schema: './prisma/schema.prisma',
   experimental: { adapter: true },
   adapter: async () => new PrismaPg({
-    connectionString: process.env['DATABASE_URL'] ??
-      `postgresql://audit_svc:${process.env['DB_PASSWORD']}@pgbouncer:6432/audit_db?pgbouncer=true&connect_timeout=5&pool_timeout=5`,
+    connectionString: `postgresql://audit_svc:${process.env['DB_PASSWORD']}@pgbouncer:6432/audit_db?pgbouncer=true&connect_timeout=5&pool_timeout=5`,
   }),
 });

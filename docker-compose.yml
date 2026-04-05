@@ -1,5 +1,6 @@
 services:
   audit-svc:
+    build: .
     image: ${DOCKER_USERNAME}/audit-svc:${IMAGE_TAG:-latest}
     container_name: audit-svc
     restart: unless-stopped
