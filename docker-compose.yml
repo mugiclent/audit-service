@@ -1,0 +1,17 @@
+services:
+  audit-svc:
+    image: ${DOCKER_USERNAME}/audit-svc:${IMAGE_TAG:-latest}
+    container_name: audit-svc
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      DB_PASSWORD: ${DB_PASSWORD}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+    networks:
+      - katisha-net
+
+networks:
+  katisha-net:
+    external: true

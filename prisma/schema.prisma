@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  event_id    String   @unique @db.Uuid // idempotency key from the event envelope
+  version     Int
+  source      String   @db.VarChar(64) // originating service, e.g. "user-service"
+  actor_id    String   @db.Uuid
+  action      String   @db.VarChar(64) // e.g. "login", "create", "update", "delete"
+  resource    String   @db.VarChar(64) // e.g. "User", "Org"
+  resource_id String   @db.Uuid
+  org_id      String?  @db.Uuid // org context of the actor (null for passengers)
+  delta       Json? // before/after snapshot for updates
+  ip          String?  @db.VarChar(45) // IPv4 or IPv6
+  occurred_at DateTime // from the event envelope timestamp (when action happened)
+  created_at  DateTime @default(now()) // when audit-service persisted it
+
+  @@index([actor_id])
+  @@index([org_id])
+  @@index([resource, resource_id])
+  @@index([action])
+  @@index([source])
+  @@index([occurred_at])
+  @@map("audit_logs")
+}
