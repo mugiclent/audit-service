@@ -102,12 +102,20 @@ jobs:
               --domain=http://localhost:8080 \
               --plain 2>/dev/null)
 
+            # First deploy only: baseline the existing schema so migrate deploy
+            # doesn't try to recreate tables that already exist.
+            # Fails harmlessly on subsequent deploys — the || true absorbs it.
             docker run --rm \
               --network katisha-net \
-              -e DB_PASSWORD="${DB_PASSWORD}" \
-              -e DATABASE_URL="postgresql://audit_svc:${DB_PASSWORD}@pgbouncer:6432/audit_db?pgbouncer=true&connect_timeout=5&pool_timeout=5" \
+              -e DIRECT_DATABASE_URL="postgresql://audit_svc:${DB_PASSWORD}@db:5432/audit_db" \
               ${{ secrets.DOCKER_USERNAME }}/audit-svc:${{ needs.build-and-push.outputs.image_tag }} \
-              npm run db:push
+              npx prisma migrate resolve --applied 20260604143838_init || true
+
+            docker run --rm \
+              --network katisha-net \
+              -e DIRECT_DATABASE_URL="postgresql://audit_svc:${DB_PASSWORD}@db:5432/audit_db" \
+              ${{ secrets.DOCKER_USERNAME }}/audit-svc:${{ needs.build-and-push.outputs.image_tag }} \
+              npm run db:deploy
 
             infisical run \
               --token="$INFISICAL_TOKEN" \

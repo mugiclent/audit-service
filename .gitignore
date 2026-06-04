@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Local Docker override — contains port bindings and env_file; never commit
+docker-compose.override.yml
+
 # Local secrets — filled-in copy of actions.env, never commit
 actions.env
 
