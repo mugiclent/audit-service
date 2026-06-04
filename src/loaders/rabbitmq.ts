@@ -8,11 +8,22 @@ const RETRY_DELAY_MS = 3_000;
 let connection: ChannelModel;
 let auditChannel: Channel;
 let isShuttingDown = false;
+let isReconnectingChannel = false;
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Retries indefinitely until the broker accepts a connection. */
+// ── Health state ─────────────────────────────────────────────────────────────
+
+type RabbitHealth = { ok: boolean; error?: string };
+let rabbitHealth: RabbitHealth = { ok: false, error: 'not yet connected' };
+
+export function getRabbitMQHealth(): RabbitHealth {
+  return rabbitHealth;
+}
+
+// ── Connection ───────────────────────────────────────────────────────────────
+
 const connectWithRetry = async (): Promise<void> => {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -26,6 +37,8 @@ const connectWithRetry = async (): Promise<void> => {
     }
   }
 };
+
+// ── Channel setup (topology + subscriber) ────────────────────────────────────
 
 /**
  * Topology (asserted idempotently on startup):
@@ -44,18 +57,14 @@ const connectWithRetry = async (): Promise<void> => {
  * RabbitMQ management UI before restarting. Queue arguments are immutable
  * once declared.
  */
-export const initRabbitMQ = async (): Promise<void> => {
-  await connectWithRetry();
-
+const setupAuditChannel = async (): Promise<void> => {
   auditChannel = await connection.createChannel();
   await auditChannel.prefetch(1);
 
-  // Assert dead-letter infrastructure
   await auditChannel.assertExchange('audit.dlx', 'fanout', { durable: true });
   await auditChannel.assertQueue('audit.dead', { durable: true });
   await auditChannel.bindQueue('audit.dead', 'audit.dlx', '');
 
-  // Assert main exchange and queue
   await auditChannel.assertExchange('logs', 'topic', { durable: true });
   await auditChannel.assertQueue('audit', {
     durable: true,
@@ -65,20 +74,50 @@ export const initRabbitMQ = async (): Promise<void> => {
 
   await startAuditSubscriber(auditChannel);
 
+  rabbitHealth = { ok: true };
   console.warn('[rabbitmq] Connected — auditChannel consuming');
 
-  // Reconnect automatically on unexpected broker disconnect
+  auditChannel.on('error', (err: Error) => {
+    console.warn('[rabbitmq] Channel error:', err.message);
+    // 'close' fires after 'error' — reconnect logic lives there
+  });
+
+  auditChannel.on('close', () => {
+    if (isShuttingDown || isReconnectingChannel) return;
+    isReconnectingChannel = true;
+    rabbitHealth = { ok: false, error: 'channel closed — re-creating' };
+    console.warn(`[rabbitmq] Channel closed — re-creating in ${RETRY_DELAY_MS / 1000}s`);
+    setTimeout(() => {
+      void setupAuditChannel()
+        .catch((err: Error) => {
+          // Connection gone — connection.on('close') will trigger full reconnect
+          console.warn('[rabbitmq] Failed to re-create channel:', err.message);
+        })
+        .finally(() => {
+          isReconnectingChannel = false;
+        });
+    }, RETRY_DELAY_MS);
+  });
+};
+
+// ── Public lifecycle ──────────────────────────────────────────────────────────
+
+export const initRabbitMQ = async (): Promise<void> => {
+  await connectWithRetry();
+  await setupAuditChannel();
+
+  connection.on('error', (err: Error) => {
+    console.warn('[rabbitmq] Connection error:', err.message);
+    // 'close' fires after 'error' — reconnect logic lives there
+  });
+
   connection.on('close', () => {
     if (isShuttingDown) return;
+    rabbitHealth = { ok: false, error: 'connection lost — reconnecting' };
     console.warn('[rabbitmq] Connection lost — reconnecting...');
     setTimeout(() => {
       void initRabbitMQ();
     }, RETRY_DELAY_MS);
-  });
-
-  connection.on('error', (err: Error) => {
-    // 'close' will fire after 'error' — reconnect logic lives there
-    console.warn('[rabbitmq] Connection error:', err.message);
   });
 };
 

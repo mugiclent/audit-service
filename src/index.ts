@@ -3,8 +3,8 @@ import './config/env.js'; // fail-fast env validation at startup
 import { config } from './config/index.js';
 import express from 'express';
 import type { Request, Response } from 'express';
-import { initPrisma } from './loaders/prisma.js';
-import { initRabbitMQ, closeRabbitMQ } from './loaders/rabbitmq.js';
+import { initPrisma, checkDbHealth } from './loaders/prisma.js';
+import { initRabbitMQ, closeRabbitMQ, getRabbitMQHealth } from './loaders/rabbitmq.js';
 import { prisma } from './models/index.js';
 import { auditRouter } from './api/audit.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -17,7 +17,22 @@ const start = async (): Promise<void> => {
   app.use(express.json());
 
   app.get('/health', (_req: Request, res: Response) => {
-    res.status(200).json({ status: 'ok', service: 'audit-svc', timestamp: new Date().toISOString() });
+    void (async () => {
+      const [db, rabbit] = await Promise.all([
+        checkDbHealth(),
+        Promise.resolve(getRabbitMQHealth()),
+      ]);
+      const allOk = db.ok && rabbit.ok;
+      res.status(allOk ? 200 : 503).json({
+        status: allOk ? 'ok' : 'degraded',
+        service: 'audit-svc',
+        timestamp: new Date().toISOString(),
+        checks: {
+          database: db.ok ? 'up' : { status: 'down', error: db.error },
+          rabbitmq: rabbit.ok ? 'up' : { status: 'down', error: rabbit.error },
+        },
+      });
+    })();
   });
 
   app.use('/api/v1/audit-logs', auditRouter);
