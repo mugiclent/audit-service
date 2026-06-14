@@ -61,11 +61,11 @@ const setupAuditChannel = async (): Promise<void> => {
   auditChannel = await connection.createChannel();
   await auditChannel.prefetch(1);
 
-  await auditChannel.assertExchange('audit.dlx', 'fanout', { durable: true });
+  await auditChannel.checkExchange('audit.dlx');
   await auditChannel.assertQueue('audit.dead', { durable: true });
   await auditChannel.bindQueue('audit.dead', 'audit.dlx', '');
 
-  await auditChannel.assertExchange('logs', 'topic', { durable: true });
+  await auditChannel.checkExchange('logs');
   await auditChannel.assertQueue('audit', {
     durable: true,
     arguments: { 'x-dead-letter-exchange': 'audit.dlx' },
